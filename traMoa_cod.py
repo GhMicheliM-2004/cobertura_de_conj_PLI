@@ -1,0 +1,76 @@
+#Henrique Rosa de Araujo RA107800
+#Gustavo Henrique Sargi Michelim RA128968
+
+#README: Para rodar o código via Jupyter (Google Colab), deve-se adicionar as instâncias da mesma forma que foram adicionadas no trabalho original
+#No caso: "/content/drive/My Drive/Colab Notebooks/trabMoa-main/instancias", por meio de uma pasta pública no Google Drive,
+
+!pip install pulp
+!pip install numpy
+import time
+import pulp
+import numpy as np
+import os
+import importlib.util
+from google.colab import drive
+drive.mount('/content/drive')
+
+def carregar_instancia_py(py_path):
+
+    spec = importlib.util.spec_from_file_location("/content/drive/My Drive/Colab Notebooks/trabMoa-main/instancias", py_path)
+    instancia = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(instancia)
+
+    m = instancia.m
+    n = instancia.n
+    d = instancia.d
+    A = np.array(instancia.A)
+
+    return m, n, d, A
+
+def resolver_instancia(m, n, d, A):
+    inicio = time.time()
+    prob = pulp.LpProblem("MaximumCoveringProblem", pulp.LpMinimize)
+
+    x = pulp.LpVariable.dicts("x", range(n), cat="Binary")
+    y = pulp.LpVariable.dicts("y", range(m), cat="Binary")
+
+    prob += pulp.lpSum(y[i] for i in range(m)), "TotalNaoCobertas"
+    prob += pulp.lpSum(x[j] for j in range(n)) <= d, "LimiteColunas"
+
+    for i in range(m):
+        prob += pulp.lpSum(A[i][j] * x[j] for j in range(n)) + y[i] >= 1, f"Cobertura_{i}"
+
+    prob.solve(pulp.PULP_CBC_CMD(msg=0)) #solver
+
+    fim = time.time()
+    tempo_execucao = fim - inicio
+
+    resultado = {
+        "status": pulp.LpStatus[prob.status], # not solved / optimal / infeasible (sem solucao viavel) / unbounded (problema ilimitado) / undefined
+        "y": [int(pulp.value(y[i])) for i in range(m)],
+        "x": [int(pulp.value(x[j])) for j in range(n)],
+        "z": int(pulp.value(prob.objective)),
+        "tempo_segundos": tempo_execucao,
+        "A": A
+    }
+    return resultado
+
+# le instancias
+
+arquivos_py = [f for f in os.listdir("/content/drive/My Drive/Colab Notebooks/trabMoa-main/instancias") if f.endswith(".py")]
+
+for arquivo in arquivos_py:
+    caminho = os.path.join("/content/drive/My Drive/Colab Notebooks/trabMoa-main/instancias", arquivo)
+    print(f"\nRESOLVENDO A INSTANCIA: {arquivo}")
+
+    try:
+        m, n, d, A = carregar_instancia_py(caminho)
+        resultado = resolver_instancia(m, n, d, A)
+
+        print(f"Status: {resultado['status']}")
+        print(f"Valor da função objetivo (número total de linhas não cobertas): {resultado['z']}")
+        print(f"x (colunas escolhidas): {resultado['x']}")
+        print(f"y (linhas não cobertas): {resultado['y']}")
+        print(f"Tempo de execução: {resultado['tempo_segundos']} segundos")
+    except Exception as e:
+        print(f"Erro ao processar {arquivo}: {e}")
